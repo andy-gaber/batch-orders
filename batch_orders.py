@@ -129,9 +129,14 @@ def populate_dict_with_new_orders(list_of_orders):
                 else:
                     new_orders_dict[sku] += quantity
 
-                # If the customer ordered more than one of this item flag the order to confirm it's correct when packing.
+                # If the customer ordered multiple quantities of this item flag the order to confirm it's correct when packing.
                 if int(quantity) > 1:
-                    item_quantity_more_than_one_dict[order_num] = (cust_name, sku, quantity)
+                    if order_num not in item_quantity_more_than_one_dict:
+                        item_quantity_more_than_one_dict[order_num] = [cust_name, [sku], [quantity]]
+                    # If the order contains multiple quantities of multiple items, append additional SKU's and corresponding quantities.
+                    else:
+                        item_quantity_more_than_one_dict[order_num][1].append(sku)  # Index 1 is the SKU list.
+                        item_quantity_more_than_one_dict[order_num][2].append(quantity) # Index 2 is the quantity list.
 
 def get_new_orders_list():
     """Return a sorted list of new orders.
@@ -251,9 +256,12 @@ if __name__ == '__main__':
         if item_quantity_more_than_one_dict:
             print('\n* ORDERS WITH MORE THAN ONE ITEM QUANTITY:\n')
             for key, value in item_quantity_more_than_one_dict.items():
-                # Key is order number, value[0] is customer name, value[1] is SKU, value[2] is quantity.
-                print(key + ' - ' + value[0] + ' - ' + value[1] + ' - (' + str(value[2]) + ')')
-            print()
+                print(key) # Key is the order number.
+                for item in range(len(value[1])):  # value[1] is a list of SKU's
+                    print(value[0])     # value[0] is the customer name.
+                    print(value[1][item])  # value[1][item] is the current SKU in the list of SKU's.
+                    print(value[2][item])  # value[2][item] is the current quantity in the list of quantities.
+                    print()
 
         # Send email with updated list of new orders.
         send_email_with_new_orders()
