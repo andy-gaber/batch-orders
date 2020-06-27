@@ -186,6 +186,44 @@ def write_todays_orders_sorted_file(todays_orders_list):
             else:
                 f.write(item[0] + '\n')
 
+def write_orders_NEW(new_order_dictionary):
+    """Write new orders string to a file.
+
+    Write the item style and a list of its sizes (and quantities), followed by a newline character, for each pair of items in the new_order_dictionary. If the item's quantity is more than one it will be written, otherwise it will be omitted to signify a single item.
+
+    new_order_dictionary : dictionary, key = string, value = string representing integer, or list if strings
+    """
+    desired_order = {'SM': 1, 'ME': 2, 'LR': 3, 'XL': 4, '2X': 5, '3X': 6, '4X': 7, '5X': 8}
+
+    # Encoding for unicode characters of foreign language alphabet.
+    with open('TODAYS_ORDERS_[NEW].txt', 'w', encoding='utf-8') as f:
+        for key, value in new_order_dictionary.items():
+            # If the hashed value to this item is a List, proceed.
+            if type(value) is list:
+                value.sort(key=lambda x: desired_order[x[:2]])
+                # Add quantity of item to "pick list" only if there is more than one.
+                for i in range(len(value)):
+                    sku, quant = value[i].split('-')
+                    if int(quant) == 1:
+                        value[i] = sku
+                    else:
+                        value[i] = sku + ' (' + quant + ')'
+                f.write(key + ' -> ')
+
+                # Add commas as delimiter's, except for last item.
+                for i in range(len(value)):
+                    if i + 1 == len(value):
+                        f.write(str(value[i]))
+                    else:
+                        f.write(str(value[i]) + ', ')
+                f.write('\n')
+
+            else:
+                if int(value) > 1:
+                    f.write(key + ' ... (' + value + ')' + '\n')
+                else:
+                    f.write(key + '\n')
+
 def write_todays_orders_HTML_img_file(todays_orders_list):
     """Write new orders string to an HTML file.
 
@@ -245,6 +283,40 @@ if __name__ == '__main__':
 
         # Create list of the new batch of orders, sorted by SKU.
         todays_orders_list = get_new_orders_list()
+
+        #################################################################
+        ''' Updated sort function. Previously each individual item was written to an external file, which serves as the "pick list," however this led to two problems:
+
+        1) The "pick list" became very long and filled with a multitude of identical inventory items in various sizes. (Example: 3 smalls, 2 mediums, and 4 XLs; all for the same style).
+
+        2) Due to ASCII, Python's sort function would sort items in an undesirable order. The order would be: 2XL, 3XL, 4XL, 5XL, LRG, MED, SML, XL, and the order I wanted was: SML, MED, LRG, XL, 2XL, 3XL, 4XL, 5XL.
+
+        To solve this I parsed the SKU's in new_orders_list and added all individual item styles to a hash table as a key, and created a list of all the sizes, and their respective quantities, as the value in the hash table. Then I sorted the items in the hash table in the desired order by passing a custom comparator to Python's sort function. This resulted in a "pick list" that was more condensed; each line contained the style and then a list of sizes, which were in the desired order too.
+        '''
+        new_dict = {}
+        for item in todays_orders_list:  # element in todays_order_list: (order, quantity, image link)
+            description = item[0]
+            quantity = item[1]
+
+            # try: only proceed with SKU's in the form BRAND-STYLE-SIZE (the majority of our inventory).
+            try:
+                sku, style, size = item[0].split('-')
+                # Some random SKU's will pass first try clause, but are not desired BRAND-STYLE-SIZE, here we narrow down further.
+                try:
+                    if int(style):
+                        sku_and_style = sku + '-' + style
+                        if sku_and_style not in new_dict:
+                            new_dict[sku_and_style] = [size + '-' + str(quantity)]
+                        else:
+                            new_dict[sku_and_style].append(size + '-' + str(quantity))
+                except:
+                    new_dict[description] = str(quantity)
+            except:
+                new_dict[description] = str(quantity)
+
+        write_orders_NEW(new_dict)
+
+        #################################################################
 
         # Write the sorted list to text file.
         write_todays_orders_sorted_file(todays_orders_list)
