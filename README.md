@@ -8,6 +8,6 @@ When new awaiting shipment order data is requested, and each order’s Order ID 
 
 After all awaiting shipment orders have been traversed, the hash table is sorted by its keys (i.e. alphanumerically via SKU), then each SKU, with its respective quantity, is written to an external text file. This file is the current batch “pick list”.
 
-In addition, ShipStation’s API provides an item’s image URL that redirects to the item image saved in ShipStation's database. This URL is used by the program to create an additional HTML file that contains each new awaiting shipment item’s image URL to confirm item correctness when picking new orders.
+In addition, ShipStation’s API provides an item’s image URL that redirects to the item image saved in ShipStation's database. This URL is used by the program to create an additional HTML file that contains each new awaiting shipment item’s image URL that can be referenced to confirm item correctness when picking new orders.
 
 The program is automated to recur at regular intervals throughput the day to promptly fetch new orders waiting to be shipped, and Python’s Simple Mail Transfer Protocol (SMTP) library is implemented to send e-mails at each interval with the current batch of new orders for immediate processing.
