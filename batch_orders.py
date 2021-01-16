@@ -28,8 +28,10 @@ image_dict = {}
 # value : tuple (str (customer name), str (SKU), str (quantity))
 item_quantity_more_than_one_dict = {}
 
-# Set of order ID's that will not be processed. Order ID's are string literals.
-do_not_pull = set([])
+# Dictionary to contain customers who placed more than one order, used to locate and combine orders for shipping.
+# key : str (order number)
+# value : int (quantity)
+customer_name_more_than_one_dict = {}
 
 # The order ID file contains previous orders that have been processed. Check the filepath for an order ID text file. If the file does not exist, initialize an empty list to contain order ID's that will be processed. If the file does exist, open it and parse the order ID's contained, then initialize a list and append each order ID to it.
 if not os.path.isfile('ORDER_ID_LIST.txt'):
@@ -43,7 +45,7 @@ else:
 print(datetime.datetime.now().strftime("%m/%d/%Y %I:%M:%S %p") + '\n')
 
 # Dictionary of obsolete SKU's mapped to their updated SKU's.
-sku_conversion_dict = {'100-SML':'600-SML', '100-MED':'600-MED', '100-LRG':'600-LRG', '100-XL':'600-XL', '100-2XL':'600-2XL', '100-3XL':'600-3XL', '100-4XL':'600-4XL', '100-5XL':'600-5XL', '110-SML':'610-SML', '110-MED':'610-MED', '110-LRG':'610-LRG', '110-XL':'610-XL', '110-2XL':'610-2XL', '110-3XL':'610-3XL', '110-4XL':'610-4XL', '110-5XL':'610-5XL', '200-SML':'300-SML', '200-MED':'300-MED', '200-LRG':'300-LRG', '200-XL':'300-XL', '200-2XL':'300-2XL', '200-3XL':'300-3XL', '200-4XL':'300-4XL', '200-5XL':'300-5XL', '205-SML':'505-SML', '205-MED':'505-MED', '205-LRG':'505-LRG', '205-XL':'505-XL', '205-2XL':'505-2XL', '205-3XL':'505-3XL', '205-4XL':'505-4XL', '205-5XL':'505-5XL'}
+sku_conversion_dict = {'A-100-SML':'A-600-SML', 'A-100-MED':'A-600-MED', 'A-100-LRG':'A-600-LRG', 'A-100-XL':'A-600-XL', 'A-100-2XL':'A-600-2XL', 'A-100-3XL':'A-600-3XL', 'A-100-4XL':'A-600-4XL', 'A-100-5XL':'A-600-5XL', 'B-110-SML':'B-610-SML', 'B-110-MED':'B-610-MED', 'B-110-LRG':'B-610-LRG', 'B-110-XL':'B-610-XL', 'B-110-2XL':'B-610-2XL', 'B-110-3XL':'B-610-3XL', 'B-110-4XL':'B-610-4XL', 'B-110-5XL':'B-610-5XL'}
 
 def refresh_store():
     """Refresh the selling platform.
@@ -81,22 +83,55 @@ def populate_dict_with_new_orders(list_of_orders):
     Args:
         list_of_orders: List of dictionaries.
     """
-    # Print quantity of orders for this store.
-    print('THIS STORE HAS: ' + str(len(list_of_orders)) + ' ORDERS\n')
-
     # Extract relevant information from each new order; add new order ID's to external text file; populate global dictionary with new order information; populate image URL dictionary with new order URL's.
     for order in list_of_orders:
         order_num = order['orderNumber']
         cust_name = order['shipTo']['name']
 
-        # If there is a complication with an order do not add its information to the global dictionary.
-        if order_num in do_not_pull:
-            print(order_num + ' - DID NOT ADD THESE ITEMS TO NEW ORDERS LIST')
+        if cust_name not in customer_name_more_than_one_dict:
+            customer_name_more_than_one_dict[cust_name] = 1
+        else:
+            customer_name_more_than_one_dict[cust_name] += 1
+
+        # Order has already been processed from earlier; probably an issue with the order.
+        if order_num in order_id_list:
+            print('+' + '-'*100)
+            print('| ==== NOT A NEW ORDER ====')
+            print('| ' + order_num)
+            print('| ' + cust_name)
+
+            # A list of dictionaries with item information.
+            items_list = order['items']
+
+            for item in items_list:
+                sku = item['sku']
+                name = item['name'] # Item description that we provided.
+                quantity = item['quantity']
+                img_url = item['imageUrl']
+
+                # Convert obsolete SKU to revised SKU, if necessary.
+                if sku in sku_conversion_dict:
+                    sku = sku_conversion_dict[sku]
+
+                # If SKU was randomly generated make it intelligible by replacing it with the provided item desciption.
+                if sku[:3] == 'wi_':
+                    sku = name
+
+                # If item does not have a SKU, assign its SKU as the provided item desciption.
+                if sku == '':
+                    sku = name
+
+                if int(quantity) > 1:
+                    print('| ' + sku + ' (' + str(quantity) + ')')
+                else:
+                    print('| ' + sku)
             continue
-        print(order_num + ' - ' + cust_name)
 
         # Append new order ID's to external text file and also to new order id list.
         if order_num not in order_id_list:
+            print('+' + '-'*100)
+            print('| ' + order_num)
+            print('| ' + cust_name)
             with open('ORDER_ID_LIST.txt', 'a') as f:
                 f.write(order_num + ',')
             order_id_list.append(order_num)
@@ -129,14 +164,13 @@ def populate_dict_with_new_orders(list_of_orders):
                 else:
                     new_orders_dict[sku] += quantity
 
-                # If the customer ordered multiple quantities of this item flag the order to confirm it's correct when packing.
+                # If the customer ordered more than one of this item flag the order to confirm it's correct when packing.
                 if int(quantity) > 1:
-                    if order_num not in item_quantity_more_than_one_dict:
-                        item_quantity_more_than_one_dict[order_num] = [cust_name, [sku], [quantity]]
-                    # If the order contains multiple quantities of multiple items, append additional SKU's and corresponding quantities.
-                    else:
-                        item_quantity_more_than_one_dict[order_num][1].append(sku)  # Index 1 is the SKU list.
-                        item_quantity_more_than_one_dict[order_num][2].append(quantity) # Index 2 is the quantity list.
+                    item_quantity_more_than_one_dict[order_num] = (cust_name, sku, quantity)
+                    print('| ' + sku + ' (' + str(quantity) + ')')
+                else:
+                    print('| ' + sku)
+
 
 def get_new_orders_list():
     """Return a sorted list of new orders.
@@ -164,10 +198,9 @@ def print_quantity_of_orders(await_ship):
     Args:
         await_ship: List of dictionaries.
     """
-    print()
-    print('-' * 30)
-    print('Awaiting Shipment Total: ' + str(len(await_ship)))
-    print('-' * 30)
+    print('+' + '-'*25 + '+')
+    print('| THIS STORE HAS: ' + str(len(await_ship)) + ' ORDERS |')
+    print('+' + '-'*25 + '+')
 
 def write_todays_orders_sorted_file(todays_orders_list):
     """Write new orders string to a file.
@@ -191,14 +224,18 @@ def write_orders_NEW(new_order_dictionary):
 
     Write the item style and a list of its sizes (and quantities), followed by a newline character, for each pair of items in the new_order_dictionary. If the item's quantity is more than one it will be written, otherwise it will be omitted to signify a single item.
 
-    new_order_dictionary : dictionary, key = string, value = string representing integer, or list if strings
+    Args:
+        new_order_dictionary: dictionary (key = string, value = string representing integer, or list if strings).
     """
+    # Due to ASCII, Python's sort function would sort items in an undesirable order. This is a custom comparator
+    # to sort items based on size (SML, MED, LRG, etc) instead of ASCII code.
     desired_order = {'SM': 1, 'ME': 2, 'LR': 3, 'XL': 4, '2X': 5, '3X': 6, '4X': 7, '5X': 8}
 
     # Encoding for unicode characters of foreign language alphabet.
     with open('TODAYS_ORDERS_[NEW].txt', 'w', encoding='utf-8') as f:
         for key, value in new_order_dictionary.items():
-            # If the hashed value to this item is a List, proceed.
+            # If the hashed value to this item is a List, parse and sort items in the List.
+            # This occurs if multiple sizes of a SKU were sold and awaiting shipment.
             if type(value) is list:
                 value.sort(key=lambda x: desired_order[x[:2]])
                 # Add quantity of item to "pick list" only if there is more than one.
@@ -217,8 +254,9 @@ def write_orders_NEW(new_order_dictionary):
                     else:
                         f.write(str(value[i]) + ', ')
                 f.write('\n')
-
+            # If hashed value is not a List, do not need to sort.
             else:
+                # Add quantity of item to "pick list" only if there is more than one.
                 if int(value) > 1:
                     f.write(key + ' ... (' + value + ')' + '\n')
                 else:
@@ -324,16 +362,31 @@ if __name__ == '__main__':
         # Write the item's URL image link to HTML file.
         write_todays_orders_HTML_img_file(todays_orders_list)
 
-        # For any individual order that contains an item with a quantity greater than one: print order number, customer name, SKU, and quantity.
+        # For any individual order that contains an item with a quantity greater than one, print order number, customer name, SKU, and quantity.
         if item_quantity_more_than_one_dict:
-            print('\n* ORDERS WITH MORE THAN ONE ITEM QUANTITY:\n')
+            print('+' + '-'*100)
+            print('| ORDERS WITH MORE THAN ONE ITEM QUANTITY:')
+            print('|')
+            # Key is order number, value[0] is customer name, value[1] is SKU, value[2] is quantity.
             for key, value in item_quantity_more_than_one_dict.items():
-                print(key) # Key is the order number.
-                for item in range(len(value[1])):  # value[1] is a list of SKU's
-                    print(value[0])     # value[0] is the customer name.
-                    print(value[1][item])  # value[1][item] is the current SKU in the list of SKU's.
-                    print(value[2][item])  # value[2][item] is the current quantity in the list of quantities.
-                    print()
+                print('| ' + key + ' - ' + value[0] + ' - ' + value[1] + ' - (' + str(value[2]) + ')')
+            print('+' + '-'*100)
+        else:
+            print('+' + '-'*100)
+            print('| ORDERS WITH MORE THAN ONE ITEM QUANTITY:')
+            print('|')
+            print('+' + '-'*100)
+
+        # For any customers that placed more than one order, print customer name and quantity of orders.
+        print()
+        print('+' + '-'*100)
+        print('| CUSTOMERS WITH MORE THAN ONE ORDER:')
+        print('|')
+        # Key is customer name, value is quantity.
+        for key, value in customer_name_more_than_one_dict.items():
+            if value > 1:
+                print('| ' + key + ' - ' + str(value))
+        print('+' + '-'*100 + '\n')
 
         # Send email with updated list of new orders.
         send_email_with_new_orders()
